@@ -1,14 +1,24 @@
+# syntax=docker/dockerfile:1
+
 # build stage
 FROM golang:latest AS builder
 
-RUN apk add git gcc libc-dev
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
 
-WORKDIR /go/src/coupon-service
 
-COPY . .
+COPY ./cmd/coupon_service/main.go ./cmd/coupon_service/main.go
+COPY ./internal/ ./internal/
 
-WORKDIR /go/src/coupon-service/cmd/export
-RUN go build -o main .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./server ./cmd/coupon_service/main.go
 
-ENTRYPOINT ./main
+#build server
+FROM scratch
+
+WORKDIR /
+
+COPY --from=builder /app/server ./
+
 EXPOSE 8080
+ENTRYPOINT  ["./server"]

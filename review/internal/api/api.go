@@ -2,80 +2,87 @@ package api
 
 import (
 	"context"
-	"coupon_service/internal/service/entity"
+	"coupon_service/internal/config"
+	"coupon_service/internal/service"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-type Service interface {
-	ApplyCoupon(entity.Basket, string) (*entity.Basket, error)
-	CreateCoupon(int, string, int) any
-	GetCoupons([]string) ([]entity.Coupon, error)
-}
-
-type Config struct {
-	Host string
-	Port int
-}
-
 type API struct {
 	srv *http.Server
-	MUX *gin.Engine
-	svc Service
-	CFG Config
+	mux *gin.Engine
+	svc service.Service
 }
 
-func New[T Service](cfg Config, svc T) API {
-	gin.SetMode(gin.ReleaseMode)
-	r := new(gin.Engine)
-	r = gin.New()
-	r.Use(gin.Recovery())
+func New(options ...func(*API)) *API {
+	api := &API{}
 
-	return API{
-		MUX: r,
-		CFG: cfg,
-		svc: svc,
-	}.withServer()
+	for _, o := range options {
+		o(api)
+	}
+	return api
 }
 
-func (a API) withServer() API {
+func WithDefaultGinRouter() func(*API) {
+	return func(a *API) {
+		gin.SetMode(gin.ReleaseMode)
+		r := new(gin.Engine)
+		r = gin.New()
+		r.Use(gin.Recovery())
+		a.mux = r
+	}
+}
 
-	ch := make(chan API)
-	go func() {
+func WithCustomMiddleware() func(*API){
+	return func(a *API) {
+		a.mux.Use(ErrorHandler())
+	}
+}
+
+func WithServer(cfg *config.Config, svc service.Service) func(*API) {
+	return func(a *API) {
 		a.srv = &http.Server{
-			Addr:    fmt.Sprintf(":%d", a.CFG.Port),
-			Handler: a.MUX,
+			Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
+			Handler: a.mux,
 		}
-		ch <- a
-	}()
-
-	return <-ch
+		a.svc = svc
+	}
 }
 
-func (a API) withRoutes() API {
-	apiGroup := a.MUX.Group("/api")
-	apiGroup.POST("/apply", a.Apply)
-	apiGroup.POST("/create", a.Create)
-	apiGroup.GET("/coupons", a.Get)
-	return a
+func WithRoutes() func(*API) {
+	return func(a *API) {
+		apiGroup := a.mux.Group("/api")
+		apiGroup.POST("/apply", a.Apply)
+		apiGroup.POST("/create", a.Create)
+		apiGroup.GET("/coupons", a.Get)
+	}
 }
 
 func (a API) Start() {
-	if err := a.srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
+	if err := a.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Println(err)
 	}
 }
 
 func (a API) Close() {
-	<-time.After(5 * time.Second)
+	quitCh := make(chan os.Signal, 1)
+	signal.Notify(quitCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	<-quitCh
+	log.Println("shutdown signal received...")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := a.srv.Shutdown(ctx); err != nil {
 		log.Println(err)
 	}
+
+	log.Println("shutdown completed")
 }

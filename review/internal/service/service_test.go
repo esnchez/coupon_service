@@ -1,22 +1,23 @@
 package service
 
 import (
+	"coupon_service/internal/repository"
 	"coupon_service/internal/repository/memdb"
-	"coupon_service/internal/service/entity"
+	"coupon_service/internal/types"
 	"reflect"
 	"testing"
 )
 
 func TestNew(t *testing.T) {
 	type args struct {
-		repo Repository
+		repo repository.Repository
 	}
 	tests := []struct {
 		name string
 		args args
-		want Service
+		want CouponService
 	}{
-		{"initialize service", args{repo: nil}, Service{repo: nil}},
+		{"initialize service", args{repo: nil}, CouponService{repo: nil}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -29,22 +30,22 @@ func TestNew(t *testing.T) {
 
 func TestService_ApplyCoupon(t *testing.T) {
 	type fields struct {
-		repo Repository
+		repo repository.Repository
 	}
 	type args struct {
-		basket entity.Basket
+		basket *types.Basket
 		code   string
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
-		wantB   *entity.Basket
+		wantB   *types.Basket
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := Service{
+			s := CouponService{
 				repo: tt.fields.repo,
 			}
 			gotB, err := s.ApplyCoupon(tt.args.basket, tt.args.code)
@@ -61,7 +62,7 @@ func TestService_ApplyCoupon(t *testing.T) {
 
 func TestService_CreateCoupon(t *testing.T) {
 	type fields struct {
-		repo Repository
+		repo repository.Repository
 	}
 	type args struct {
 		discount       int
@@ -78,11 +79,15 @@ func TestService_CreateCoupon(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := Service{
+			s := CouponService{
 				repo: tt.fields.repo,
 			}
-
-			s.CreateCoupon(tt.args.discount, tt.args.code, tt.args.minBasketValue)
+			req := &types.CreateCouponRequest{
+				Discount:       tt.args.discount,
+				Code:           tt.args.code,
+				MinBasketValue: tt.args.minBasketValue,
+			}
+			s.CreateCoupon(req)
 		})
 	}
 }

@@ -1,34 +1,37 @@
 package memdb
 
 import (
-	"coupon_service/internal/service/entity"
+	"coupon_service/internal/types"
 	"fmt"
+	"sync"
 )
 
-type Config struct{}
-
-type repository interface {
-	FindByCode(string) (*entity.Coupon, error)
-	Save(entity.Coupon) error
+type MemRepository struct {
+	mu      sync.RWMutex
+	entries map[string]*types.Coupon
 }
 
-type Repository struct {
-	entries map[string]entity.Coupon
+func New() *MemRepository {
+	return &MemRepository{
+		entries: make(map[string]*types.Coupon),
+	}
 }
 
-func New() *Repository {
-	return &Repository{}
-}
+func (r *MemRepository) FindByCode(code string) (*types.Coupon, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
-func (r *Repository) FindByCode(code string) (*entity.Coupon, error) {
 	coupon, ok := r.entries[code]
 	if !ok {
-		return nil, fmt.Errorf("Coupon not found")
+		return nil, fmt.Errorf("coupon with code %s does not exist", code)
 	}
-	return &coupon, nil
+	return coupon, nil
 }
 
-func (r *Repository) Save(coupon entity.Coupon) error {
+func (r *MemRepository) Save(coupon *types.Coupon) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.entries[coupon.Code] = coupon
 	return nil
 }

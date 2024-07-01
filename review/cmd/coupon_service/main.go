@@ -5,21 +5,24 @@ import (
 	"coupon_service/internal/config"
 	"coupon_service/internal/repository/memdb"
 	"coupon_service/internal/service"
-	"fmt"
-	"time"
-)
-
-var (
-	cfg  = config.New()
-	repo = memdb.New()
+	"log"
 )
 
 func main() {
+
+	cfg := config.Load()
+
+
+	repo := memdb.New()
 	svc := service.New(repo)
-	本 := api.New(cfg.API, svc)
-	本.Start()
-	fmt.Println("Starting Coupon service server")
-	<-time.After(1 * time.Hour * 24 * 365)
-	fmt.Println("Coupon service server alive for a year, closing")
-	本.Close()
+	api := api.New(
+		api.WithDefaultGinRouter(),
+		api.WithCustomMiddleware(),
+		api.WithServer(cfg,svc),
+		api.WithRoutes(),
+	)
+
+	log.Println("Starting Coupon service server..")
+	go api.Start()
+	api.Close()
 }
